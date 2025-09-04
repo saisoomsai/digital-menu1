@@ -1,0 +1,298 @@
+## 📂 Project Structure
+```
+digital-menu/
+├── backend/
+│ ├── server.js
+│ ├── models/
+│ │ ├── MenuItem.js
+│ │ └── Order.js
+│ ├── routes/
+│ │ ├── menuRoutes.js
+│ │ └── orderRoutes.js
+│ └── .env
+├── frontend/
+│ ├── index.html
+│ ├── src/
+│ │ ├── App.jsx
+│ │ ├── main.jsx
+│ │ ├── pages/
+│ │ │ ├── MenuPage.jsx
+│ │ │ └── AdminPage.jsx
+│ │ └── context/
+│ │ └── CartContext.jsx
+│ └── tailwind.config.js
+└── package.json
+```
+## ⚙️ Backend Code
+
+
+### `backend/server.js`
+```js
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import dotenv from 'dotenv';
+
+
+import menuRoutes from './routes/menuRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';
+
+
+dotenv.config();
+const app = express();
+
+
+// Middlewares
+app.use(cors());
+app.use(express.json());
+
+
+// Routes
+app.use('/api/menu', menuRoutes);
+app.use('/api/orders', orderRoutes);
+
+
+// MongoDB Connection
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+.then(() => console.log('MongoDB connected'))
+.catch(err => console.error(err));
+
+
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+```
+
+
+### `backend/models/MenuItem.js`
+```js
+import mongoose from 'mongoose';
+
+
+const menuItemSchema = new mongoose.Schema({
+category: String,
+name: String,
+price: Number
+});
+
+
+export default mongoose.model('MenuItem', menuItemSchema);
+
+
+### `backend/models/Order.js`
+```js
+import mongoose from 'mongoose';
+
+
+const orderSchema = new mongoose.Schema({
+items: [{ name: String, price: Number, qty: Number }],
+total: Number,
+status: { type: String, default: 'Pending' },
+createdAt: { type: Date, default: Date.now }
+});
+
+
+export default mongoose.model('Order', orderSchema);
+```
+
+
+### `backend/routes/menuRoutes.js`
+```js
+import express from 'express';
+import MenuItem from '../models/MenuItem.js';
+
+
+const router = express.Router();
+
+
+// Get menu items
+router.get('/', async (req, res) => {
+const items = await MenuItem.find();
+res.json(items);
+});
+
+
+// Add menu item
+router.post('/', async (req, res) => {
+const newItem = new MenuItem(req.body);
+await newItem.save();
+res.json(newItem);
+});
+
+
+export default router;
+```
+### `backend/routes/orderRoutes.js`
+```js
+import express from 'express';
+import Order from '../models/Order.js';
+
+
+const router = express.Router();
+
+
+// Place new order
+router.post('/', async (req, res) => {
+const order = new Order(req.body);
+await order.save();
+res.json({ message: 'Order placed successfully!', order });
+});
+
+
+// Get all orders (for admin)
+router.get('/', async (req, res) => {
+const orders = await Order.find().sort({ createdAt: -1 });
+res.json(orders);
+});
+
+
+// Update order status
+router.put('/:id', async (req, res) => {
+const { status } = req.body;
+const order = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
+res.json(order);
+});
+
+
+export default router;
+```
+
+
+### `backend/.env`
+```env
+MONGO_URI=mongodb://localhost:27017/digital_menu
+PORT=4000
+```
+## 🎨 Frontend Code (Vite + React + Tailwind)
+
+
+### `frontend/src/main.jsx`
+```jsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+<React.StrictMode>
+<App />
+</React.StrictMode>,
+);
+```
+
+
+### `frontend/src/App.jsx`
+```jsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import MenuPage from './pages/MenuPage';
+import AdminPage from './pages/AdminPage';
+
+
+export default function App() {
+return (
+<BrowserRouter>
+<Routes>
+<Route path="/" element={<MenuPage />} />
+<Route path="/admin" element={<AdminPage />} />
+</Routes>
+</BrowserRouter>
+);
+}
+```
+### `frontend/src/pages/MenuPage.jsx`
+```jsx
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+
+export default function MenuPage() {
+const [menu, setMenu] = useState([]);
+
+
+useEffect(() => {
+axios.get('http://localhost:4000/api/menu').then(res => setMenu(res.data));
+}, []);
+
+
+return (
+<div className="min-h-screen bg-black text-white p-6">
+<h1 className="text-3xl font-bold text-[#d4af37] mb-6">🍴 Digital Menu</h1>
+{menu.map((item, idx) => (
+<div key={idx} className="border-b border-[#d4af37] py-2">
+<span>{item.name}</span>
+<span className="float-right">¥{item.price}</span>
+</div>
+))}
+</div>
+);
+}
+```
+
+
+### `frontend/src/pages/AdminPage.jsx`
+```jsx
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+
+export default function AdminPage() {
+const [orders, setOrders] = useState([]);
+
+
+const fetchOrders = () => {
+axios.get('http://localhost:4000/api/orders').then(res => setOrders(res.data));
+};
+
+
+useEffect(() => {
+fetchOrders();
+const interval = setInterval(fetchOrders, 3000); // refresh every 3s
+return () => clearInterval(interval);
+}, []);
+
+
+const updateStatus = (id, status) => {
+axios.put(`http://localhost:4000/api/orders/${id}`, { status }).then(fetchOrders);
+};
+return (
+<div className="min-h-screen bg-black text-white p-6">
+<h1 className="text-3xl font-bold text-[#d4af37] mb-6">📋 Orders</h1>
+{orders.map(order => (
+<div key={order._id} className="border border-[#d4af37] rounded p-3 mb-3">
+<p><b>Items:</b> {order.items.map(i => i.name).join(', ')}</p>
+<p><b>Total:</b> ¥{order.total}</p>
+<p><b>Status:</b> {order.status}</p>
+<button onClick={() => updateStatus(order._id, 'Preparing')} className="bg-yellow-600 px-2 py-1 mr-2 rounded">Preparing</button>
+<button onClick={() => updateStatus(order._id, 'Done')} className="bg-green-600 px-2 py-1 rounded">Done</button>
+</div>
+))}
+</div>
+);
+}
+```
+
+
+### `frontend/tailwind.config.js`
+```js
+export default {
+content: ['./index.html', './src/**/*.{js,jsx}'],
+theme: {
+extend: {},
+},
+plugins: [],
+}
+```
+
+
+### `frontend/src/index.css`
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+body {
+background-color: black;
+color: white;
+}
+```
